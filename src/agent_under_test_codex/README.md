@@ -73,7 +73,7 @@ scenarios before accepting the update.
 ## Local Run
 
 ```bash
-uv run car-bench-run scenarios/agent_under_test_codex/smoke.toml --show-logs
+uv run car-bench-run scenarios/agent_under_test_codex/local_smoke.toml --show-logs
 ```
 
 This expects Codex CLI to be available on `PATH` and already authenticated. You
@@ -94,7 +94,7 @@ Build the Codex agent-under-test image with the included Dockerfile, then mount 
 authenticated Codex home:
 
 ```bash
-uv run python generate_compose.py --scenario scenarios/agent_under_test_codex/docker-local.toml
+uv run python generate_compose.py --scenario scenarios/agent_under_test_codex/local_docker_smoke.toml
 docker compose --env-file .env -f scenarios/agent_under_test_codex/docker-compose.yml up --abort-on-container-exit
 ```
 
@@ -115,6 +115,11 @@ docker build \
 The Dockerfile installs Codex in a Node build stage and recreates the runtime
 `codex` launcher as a symlink into that global package so npm-managed optional
 dependencies resolve normally.
+
+There is no active auto-publishing workflow in this repository. To publish an
+agent image to GHCR, either use `docker build` / `docker push` manually, or copy
+the disabled template `.github/workflows/publish-ghcr.yml.disabled` to a real
+workflow file and update it for your own image. The template is manual-only.
 
 ## Extending The Harness
 

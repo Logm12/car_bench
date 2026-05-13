@@ -176,12 +176,23 @@ The agentified CAR-bench provides **three validation modes** for different stage
 This repository includes several agents under test. They all speak the same A2A
 protocol to the evaluator; they differ only in their internal reasoning harness.
 
-| Agent | Package | Local Scenario | Docker Scenario | How It Works |
-|-------|---------|----------------|-----------------|--------------|
-| Template LiteLLM agent | [`src/agent_under_test/`](src/agent_under_test/) | [`scenarios/agent_under_test/local.toml`](scenarios/agent_under_test/local.toml) / [`scenarios/agent_under_test/smoke.toml`](scenarios/agent_under_test/smoke.toml) | [`scenarios/agent_under_test/docker-local.toml`](scenarios/agent_under_test/docker-local.toml) | Minimal participant template using a LiteLLM-compatible model; `scenarios/agent_under_test/smoke.toml` is the quick smoke scenario. |
-| Codex JSON agent | [`src/agent_under_test_codex/`](src/agent_under_test_codex/) | [`scenarios/agent_under_test_codex/smoke.toml`](scenarios/agent_under_test_codex/smoke.toml) | [`scenarios/agent_under_test_codex/docker-local.toml`](scenarios/agent_under_test_codex/docker-local.toml) | Warm `codex app-server`; asks Spark for schema-constrained next-action JSON. |
-| Codex planner/executor | [`src/agent_under_test_codex_planner/`](src/agent_under_test_codex_planner/) | [`scenarios/agent_under_test_codex_planner/smoke.toml`](scenarios/agent_under_test_codex_planner/smoke.toml) | [`scenarios/agent_under_test_codex_planner/docker-local.toml`](scenarios/agent_under_test_codex_planner/docker-local.toml) | Plans once after each user message with a larger model, then reuses that private plan across Spark executor turns until responding. |
-| Codex Python-call DSL | [`src/agent_under_test_codex_python/`](src/agent_under_test_codex_python/) | [`scenarios/agent_under_test_codex_python/smoke.toml`](scenarios/agent_under_test_codex_python/smoke.toml) | [`scenarios/agent_under_test_codex_python/docker-local.toml`](scenarios/agent_under_test_codex_python/docker-local.toml) | Lets Spark emit a fenced Python-call action block; parses it with `ast` and maps calls back to normal A2A output. |
+| Agent | Package | Scenario Directory | How It Works |
+|-------|---------|--------------------|--------------|
+| Template LiteLLM agent | [`src/agent_under_test/`](src/agent_under_test/) | [`scenarios/agent_under_test/`](scenarios/agent_under_test/) | Minimal participant template using a LiteLLM-compatible model. |
+| Codex JSON agent | [`src/agent_under_test_codex/`](src/agent_under_test_codex/) | [`scenarios/agent_under_test_codex/`](scenarios/agent_under_test_codex/) | Warm `codex app-server`; asks Spark for schema-constrained next-action JSON. |
+| Codex planner/executor | [`src/agent_under_test_codex_planner/`](src/agent_under_test_codex_planner/) | [`scenarios/agent_under_test_codex_planner/`](scenarios/agent_under_test_codex_planner/) | Plans once after each user message with a larger model, then reuses that private plan across Spark executor turns until responding. |
+| Codex Python-call DSL | [`src/agent_under_test_codex_python/`](src/agent_under_test_codex_python/) | [`scenarios/agent_under_test_codex_python/`](scenarios/agent_under_test_codex_python/) | Lets Spark emit a fenced Python-call action block; parses it with `ast` and maps calls back to normal A2A output. |
+
+Each scenario directory uses the same six-file matrix:
+
+| Scenario File | Purpose |
+|---------------|---------|
+| `local_smoke.toml` | Local Python, train split, one task from each task type, one trial |
+| `local_test_set.toml` | Local Python, full test split, three trials |
+| `local_docker_smoke.toml` | Local Docker build, train smoke |
+| `local_docker_test_set.toml` | Local Docker build, full test split |
+| `ghcr_smoke.toml` | Published image, train smoke |
+| `ghcr_test_set.toml` | Published image, full test split |
 
 Start with the template agent if you are building a new provider integration.
 Use the Codex references as examples for more sophisticated harnessing.
@@ -193,8 +204,11 @@ Use the Codex references as examples for more sophisticated harnessing.
 **Fastest way to test code changes.** Agents run as local Python processes.
 
 ```bash
-# Run evaluation with default settings
-uv run car-bench-run scenarios/agent_under_test/local.toml --show-logs
+# Run a quick train-split smoke check
+uv run car-bench-run scenarios/agent_under_test/local_smoke.toml --show-logs
+
+# Run the full test-set config locally
+uv run car-bench-run scenarios/agent_under_test/local_test_set.toml --show-logs
 ```
 **What happens:**
 - ✅ Starts the CAR-bench evaluator locally
@@ -205,12 +219,12 @@ uv run car-bench-run scenarios/agent_under_test/local.toml --show-logs
 
 **To see agent logs** (optional), manually listen to them in separate terminals.
 
-**Configuration**: Edit [`scenarios/agent_under_test/local.toml`](scenarios/agent_under_test/local.toml)
+**Configuration**: Edit [`scenarios/agent_under_test/local_smoke.toml`](scenarios/agent_under_test/local_smoke.toml) or [`scenarios/agent_under_test/local_test_set.toml`](scenarios/agent_under_test/local_test_set.toml).
 
 To run the Codex-backed agent under test locally:
 
 ```bash
-uv run car-bench-run scenarios/agent_under_test_codex/smoke.toml --show-logs
+uv run car-bench-run scenarios/agent_under_test_codex/local_smoke.toml --show-logs
 ```
 
 This expects `codex` to be on `PATH` and authenticated before the run starts.
@@ -222,13 +236,13 @@ moving to a newer Codex CLI.
 To run the planner/executor variant:
 
 ```bash
-uv run car-bench-run scenarios/agent_under_test_codex_planner/smoke.toml --show-logs
+uv run car-bench-run scenarios/agent_under_test_codex_planner/local_smoke.toml --show-logs
 ```
 
 To run the Python-call DSL variant:
 
 ```bash
-uv run car-bench-run scenarios/agent_under_test_codex_python/smoke.toml --show-logs
+uv run car-bench-run scenarios/agent_under_test_codex_python/local_smoke.toml --show-logs
 ```
 
 ---
@@ -239,7 +253,7 @@ uv run car-bench-run scenarios/agent_under_test_codex_python/smoke.toml --show-l
 
 ```bash
 # 1. Generate docker-compose.yml next to the Docker scenario
-uv run python generate_compose.py --scenario scenarios/agent_under_test/docker-local.toml
+uv run python generate_compose.py --scenario scenarios/agent_under_test/local_docker_smoke.toml
 ```
 
 ```bash
@@ -254,15 +268,15 @@ docker compose --env-file .env -f scenarios/agent_under_test/docker-compose.yml 
 - ✅ Runs full evaluation with logs in terminal and a compact final summary
 - ✅ Saves timestamped results to `output/agent_under_test/`
 
-**Configuration**: Edit [`scenarios/agent_under_test/docker-local.toml`](scenarios/agent_under_test/docker-local.toml)
+**Configuration**: Edit [`scenarios/agent_under_test/local_docker_smoke.toml`](scenarios/agent_under_test/local_docker_smoke.toml) or [`scenarios/agent_under_test/local_docker_test_set.toml`](scenarios/agent_under_test/local_docker_test_set.toml).
 
 For the Codex-backed Docker harness, use
-[`scenarios/agent_under_test_codex/docker-local.toml`](scenarios/agent_under_test_codex/docker-local.toml)
+[`scenarios/agent_under_test_codex/local_docker_smoke.toml`](scenarios/agent_under_test_codex/local_docker_smoke.toml)
 and set `CODEX_HOME_HOST` in `.env` to an absolute authenticated Codex home.
 For the planner/executor Codex harness, use
-[`scenarios/agent_under_test_codex_planner/docker-local.toml`](scenarios/agent_under_test_codex_planner/docker-local.toml).
+[`scenarios/agent_under_test_codex_planner/local_docker_smoke.toml`](scenarios/agent_under_test_codex_planner/local_docker_smoke.toml).
 For the Python-call DSL Codex harness, use
-[`scenarios/agent_under_test_codex_python/docker-local.toml`](scenarios/agent_under_test_codex_python/docker-local.toml).
+[`scenarios/agent_under_test_codex_python/local_docker_smoke.toml`](scenarios/agent_under_test_codex_python/local_docker_smoke.toml).
 
 For Codex Docker runs, prefer a dedicated benchmark Codex home instead of
 mounting your everyday Codex desktop/app state:
@@ -287,8 +301,10 @@ LOGURU_LEVEL=DEBUG
 
 **Test the same kind of image/config you will send for evaluation.** Uses images from GitHub Container Registry.
 
-Agents in this repository can be published via the [publish.yml](.github/workflows/publish.yml) CI workflow.
-Alternatively, build and push your own images manually:
+This repository does **not** ship an active auto-publishing workflow. The safest
+default is to build and push your own agent image manually. The same Dockerfile
+used for local Docker testing is also the one you publish; no special `-ghcr`
+Dockerfile name is required.
 ```bash
 docker build --platform linux/amd64 \
     -f src/agent_under_test/Dockerfile.agent-under-test \
@@ -297,13 +313,19 @@ docker build --platform linux/amd64 \
 docker push ghcr.io/yourusername/your-agent:latest
 ```
 
+If you intentionally want CI publishing, use the disabled template at
+[`.github/workflows/publish-ghcr.yml.disabled`](.github/workflows/publish-ghcr.yml.disabled):
+copy or rename it to `.github/workflows/publish-ghcr.yml`, update the image name
+and Dockerfile path, then run it manually from GitHub Actions. The template has
+no push/tag trigger and requires typing `PUBLISH` before it pushes anything.
+
 ```bash
-# Update scenarios/agent_under_test/ghcr.toml with your image URLs
-uv run python generate_compose.py --scenario scenarios/agent_under_test/ghcr.toml
+# Update scenarios/agent_under_test/ghcr_smoke.toml with your image URLs
+uv run python generate_compose.py --scenario scenarios/agent_under_test/ghcr_smoke.toml
 docker compose --env-file .env -f scenarios/agent_under_test/docker-compose.yml up --abort-on-container-exit
 ```
 
-**Configuration**: Edit [`scenarios/agent_under_test/ghcr.toml`](scenarios/agent_under_test/ghcr.toml) with your GHCR image URLs
+**Configuration**: Edit [`scenarios/agent_under_test/ghcr_smoke.toml`](scenarios/agent_under_test/ghcr_smoke.toml) or [`scenarios/agent_under_test/ghcr_test_set.toml`](scenarios/agent_under_test/ghcr_test_set.toml) with your GHCR image URLs.
 
 Generated Docker files are ignored by git and written into the scenario folder:
 `docker-compose.yml` and `a2a-scenario.toml`. Results are written under
@@ -658,19 +680,18 @@ src/
 scenarios/
 ├── README.md                      # Scenario map
 ├── agent_under_test/              # Baseline LiteLLM template scenarios
-│   ├── local.toml                 # Local Python run
-│   ├── smoke.toml                 # Quick local smoke run
-│   ├── docker-local.toml          # Local Docker build run
-│   └── ghcr.toml                  # Published baseline image run
+│   ├── local_smoke.toml
+│   ├── local_test_set.toml
+│   ├── local_docker_smoke.toml
+│   ├── local_docker_test_set.toml
+│   ├── ghcr_smoke.toml
+│   └── ghcr_test_set.toml
 ├── agent_under_test_codex/        # Codex JSON scenarios
-│   ├── smoke.toml
-│   └── docker-local.toml
+│   └── same six-file scenario matrix
 ├── agent_under_test_codex_planner/ # Codex planner/executor scenarios
-│   ├── smoke.toml
-│   └── docker-local.toml
+│   └── same six-file scenario matrix
 └── agent_under_test_codex_python/ # Codex Python-call DSL scenarios
-    ├── smoke.toml
-    └── docker-local.toml
+    └── same six-file scenario matrix
 
 scripts/
 └── setup_car_bench.sh             # Clones the local ignored CAR-bench dependency

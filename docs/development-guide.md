@@ -373,7 +373,7 @@ configuration. The exact flags depend on the reference agent. For examples, see:
    python src/agent_under_test/server.py --host localhost --port 8080 --agent-llm "gemini/gemini-2.5-flash"
    ```
 
-2. **Configure the scenario** (`scenarios/agent_under_test/local.toml`) so the
+2. **Configure the scenario** (`scenarios/agent_under_test/local_smoke.toml`) so the
    evaluator is started by the runner and points at your agent:
    ```toml
    [evaluator]
@@ -387,7 +387,7 @@ configuration. The exact flags depend on the reference agent. For examples, see:
 
 3. **Run evaluation** (in another terminal):
    ```bash
-   uv run car-bench-run scenarios/agent_under_test/local.toml --show-logs
+   uv run car-bench-run scenarios/agent_under_test/local_smoke.toml --show-logs
    ```
 
 4. **Check results** — The evaluator will report per-task pass/fail and overall metrics.

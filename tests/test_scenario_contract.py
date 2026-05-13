@@ -1,4 +1,5 @@
 import tempfile
+import tomllib
 import unittest
 from contextlib import redirect_stdout
 from datetime import datetime
@@ -21,6 +22,22 @@ from generate_compose import (
 )
 
 loguru_logger.disable("agentbeats.run_scenario")
+
+EXPECTED_SCENARIO_FILES = {
+    "local_smoke.toml",
+    "local_test_set.toml",
+    "local_docker_smoke.toml",
+    "local_docker_test_set.toml",
+    "ghcr_smoke.toml",
+    "ghcr_test_set.toml",
+}
+
+SCENARIO_DIRS = [
+    Path("scenarios/agent_under_test"),
+    Path("scenarios/agent_under_test_codex"),
+    Path("scenarios/agent_under_test_codex_planner"),
+    Path("scenarios/agent_under_test_codex_python"),
+]
 
 
 class ScenarioContractTest(unittest.TestCase):
@@ -58,6 +75,34 @@ class ScenarioContractTest(unittest.TestCase):
         self.assertIn("docker compose --env-file .env", compose)
         self.assertNotIn("green-agent", compose)
 
+    def test_agent_scenario_directories_use_standard_matrix(self) -> None:
+        for scenario_dir in SCENARIO_DIRS:
+            with self.subTest(scenario_dir=str(scenario_dir)):
+                files = {
+                    path.name
+                    for path in scenario_dir.glob("*.toml")
+                    if path.name != "a2a-scenario.toml"
+                }
+                self.assertEqual(files, EXPECTED_SCENARIO_FILES)
+
+                for name in ("local_smoke.toml", "local_docker_smoke.toml", "ghcr_smoke.toml"):
+                    data = tomllib.loads((scenario_dir / name).read_text())
+                    config = data["config"]
+                    self.assertEqual(config["num_trials"], 1)
+                    self.assertEqual(config["task_split"], "train")
+                    self.assertEqual(config["tasks_base_num_tasks"], 1)
+                    self.assertEqual(config["tasks_hallucination_num_tasks"], 1)
+                    self.assertEqual(config["tasks_disambiguation_num_tasks"], 1)
+
+                for name in ("local_test_set.toml", "local_docker_test_set.toml", "ghcr_test_set.toml"):
+                    data = tomllib.loads((scenario_dir / name).read_text())
+                    config = data["config"]
+                    self.assertEqual(config["num_trials"], 3)
+                    self.assertEqual(config["task_split"], "test")
+                    self.assertEqual(config["tasks_base_num_tasks"], -1)
+                    self.assertEqual(config["tasks_hallucination_num_tasks"], -1)
+                    self.assertEqual(config["tasks_disambiguation_num_tasks"], -1)
+
     def test_compose_up_command_uses_root_env_file(self) -> None:
         command = compose_up_command(Path("scenarios/agent_under_test/docker-compose.yml"))
 
@@ -78,9 +123,9 @@ class ScenarioContractTest(unittest.TestCase):
 
     def test_timestamped_output_path_uses_agent_model_and_effort(self) -> None:
         data = {
-            "run": {
-                "agent_name": "codex-planner",
-                "scenario_name": "codex-planner/docker-local",
+                "run": {
+                    "agent_name": "codex-planner",
+                    "scenario_name": "codex-planner/local_docker_smoke",
                 "agent_metadata": {
                     "CODEX_PLANNER_MODEL": "gpt-5.5",
                     "CODEX_EXECUTOR_MODEL": "gpt-5.3-codex-spark",
@@ -113,7 +158,7 @@ class ScenarioContractTest(unittest.TestCase):
             },
         }
 
-        path = resolve_output_path("output", Path("scenarios/custom/smoke.toml"), data)
+        path = resolve_output_path("output", Path("scenarios/custom/local_smoke.toml"), data)
 
         self.assertIsNotNone(path)
         self.assertIn("test-trials1-base2-hall0-dis0", path.name)
@@ -131,7 +176,7 @@ class ScenarioContractTest(unittest.TestCase):
         payload = build_output_payload(
             req=req,
             evaluator_url=evaluator_url,
-            scenario_path=Path("scenarios/agent_under_test/smoke.toml"),
+            scenario_path=Path("scenarios/agent_under_test/local_smoke.toml"),
             scenario_data={
                 "agent_under_test": {
                     "endpoint": "http://127.0.0.1:8080",

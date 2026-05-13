@@ -1,10 +1,6 @@
-# Local Docker scenario for the Codex Python-call agent under test.
-#
-# Before running:
-#   1. Authenticate Codex on the host.
-#   2. Set CODEX_HOME_HOST in .env to the absolute authenticated Codex home.
-#   3. uv run python generate_compose.py --scenario scenarios/agent_under_test_codex_python/docker-local.toml
-#   4. docker compose --env-file .env -f scenarios/agent_under_test_codex_python/docker-compose.yml up --abort-on-container-exit
+# Local Docker full test-set scenario for the Codex Python-call DSL agent under test.
+# Generate with:
+#   uv run python generate_compose.py --scenario scenarios/agent_under_test_codex_python/local_docker_test_set.toml
 
 [evaluator]
 build = { context = ".", dockerfile = "src/evaluator/Dockerfile.evaluator" }
@@ -17,8 +13,9 @@ env = { CODEX_MODEL = "${CODEX_MODEL:-gpt-5.3-codex-spark}", CODEX_REASONING_EFF
 volumes = ["${CODEX_HOME_HOST:?Set CODEX_HOME_HOST in .env}:/home/carbench/.codex:rw"]
 
 [config]
-num_trials = 1
+num_trials = 3
 task_split = "test"
-tasks_base_num_tasks = 2
-tasks_hallucination_num_tasks = 0
-tasks_disambiguation_num_tasks = 0
+tasks_base_num_tasks = -1
+tasks_hallucination_num_tasks = -1
+tasks_disambiguation_num_tasks = -1
+max_steps = 50

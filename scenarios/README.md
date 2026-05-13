@@ -1,14 +1,28 @@
 # Scenario Map
 
-Scenarios mirror the agent-under-test package names under `src/`.
+Scenarios mirror the agent-under-test package names under `src/`. Every
+scenario directory contains the same six files so commands are predictable
+across reference agents and participant agents.
 
-| Agent Package | Scenario Directory | Files |
-|---------------|--------------------|-------|
-| `src/agent_under_test/` | `scenarios/agent_under_test/` | `local.toml`, `smoke.toml`, `docker-local.toml`, `ghcr.toml` |
-| `src/agent_under_test_codex/` | `scenarios/agent_under_test_codex/` | `smoke.toml`, `docker-local.toml` |
-| `src/agent_under_test_codex_planner/` | `scenarios/agent_under_test_codex_planner/` | `smoke.toml`, `docker-local.toml` |
-| `src/agent_under_test_codex_python/` | `scenarios/agent_under_test_codex_python/` | `smoke.toml`, `docker-local.toml` |
+| Agent Package | Scenario Directory |
+|---------------|--------------------|
+| `src/agent_under_test/` | `scenarios/agent_under_test/` |
+| `src/agent_under_test_codex/` | `scenarios/agent_under_test_codex/` |
+| `src/agent_under_test_codex_planner/` | `scenarios/agent_under_test_codex_planner/` |
+| `src/agent_under_test_codex_python/` | `scenarios/agent_under_test_codex_python/` |
 
-Use `smoke.toml` for quick local checks, `local.toml` for the fuller baseline
-local run, `docker-local.toml` for local Docker builds, and `ghcr.toml` for the
-published baseline image smoke.
+| Scenario File | Mode | Task Selection |
+|---------------|------|----------------|
+| `local_smoke.toml` | Local Python | Train split, one task from each task type, one trial |
+| `local_test_set.toml` | Local Python | Test split, all tasks from each task type, three trials |
+| `local_docker_smoke.toml` | Docker local build | Train split, one task from each task type, one trial |
+| `local_docker_test_set.toml` | Docker local build | Test split, all tasks from each task type, three trials |
+| `ghcr_smoke.toml` | Docker published image | Train split, one task from each task type, one trial |
+| `ghcr_test_set.toml` | Docker published image | Test split, all tasks from each task type, three trials |
+
+Generate Docker Compose from any `local_docker_*.toml` or `ghcr_*.toml` file:
+
+```bash
+uv run python generate_compose.py --scenario scenarios/agent_under_test/local_docker_smoke.toml
+docker compose --env-file .env -f scenarios/agent_under_test/docker-compose.yml up --abort-on-container-exit
+```

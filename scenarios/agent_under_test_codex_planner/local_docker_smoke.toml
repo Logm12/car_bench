@@ -1,10 +1,6 @@
-# Local Docker scenario for the Codex planner/executor agent under test.
-#
-# Before running:
-#   1. Authenticate Codex on the host.
-#   2. Set CODEX_HOME_HOST in .env to the absolute authenticated Codex home.
-#   3. uv run python generate_compose.py --scenario scenarios/agent_under_test_codex_planner/docker-local.toml
-#   4. docker compose --env-file .env -f scenarios/agent_under_test_codex_planner/docker-compose.yml up --abort-on-container-exit
+# Local Docker smoke scenario for the Codex planner/executor agent under test.
+# Generate with:
+#   uv run python generate_compose.py --scenario scenarios/agent_under_test_codex_planner/local_docker_smoke.toml
 
 [evaluator]
 build = { context = ".", dockerfile = "src/evaluator/Dockerfile.evaluator" }
@@ -18,7 +14,8 @@ volumes = ["${CODEX_HOME_HOST:?Set CODEX_HOME_HOST in .env}:/home/carbench/.code
 
 [config]
 num_trials = 1
-task_split = "test"
-tasks_base_num_tasks = 2
-tasks_hallucination_num_tasks = 0
-tasks_disambiguation_num_tasks = 0
+task_split = "train"
+tasks_base_num_tasks = 1
+tasks_hallucination_num_tasks = 1
+tasks_disambiguation_num_tasks = 1
+max_steps = 50
