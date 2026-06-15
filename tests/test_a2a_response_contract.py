@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -6,12 +7,22 @@ from types import SimpleNamespace
 
 from google.protobuf.json_format import MessageToDict
 
-from a2a.helpers.proto_helpers import new_text_part
+from a2a.helpers.proto_helpers import new_data_part, new_text_part
 from agentbeats.sync_client import (
     build_send_message_jsonrpc_request,
     create_message_with_parts,
 )
-from evaluator.car_bench_evaluator import _sum_successful_llm_time_seconds
+from evaluator.car_bench_evaluator import (
+    _normalize_tool_arguments,
+    _parse_tool_calls_data,
+    _sum_successful_llm_time_seconds,
+    _tool_parameter_schemas,
+)
+from car_bench.envs.base import Env
+from car_bench.envs.tool_execution_error_evaluator import (
+    tool_execution_errors_during_runtime,
+)
+from car_bench.types import Task, TaskType
 from track_2_agent_under_test_cerebras.car_bench_agent import (
     CARBenchAgentExecutor as CerebrasCARBenchAgentExecutor,
 )
@@ -139,6 +150,18 @@ def fake_completion(
             prompt_tokens_details=SimpleNamespace(cached_tokens=30),
             completion_tokens_details=SimpleNamespace(reasoning_tokens=7),
         ),
+    )
+
+
+def fake_task() -> Task:
+    return Task(
+        task_id="test_task",
+        calendar_id="calendar",
+        actions=[],
+        persona="",
+        instruction="",
+        context_init_config={},
+        task_type=TaskType.BASE,
     )
 
 
@@ -697,6 +720,244 @@ class A2AResponseContractTest(unittest.TestCase):
 
         self.assertEqual(value, 1.2345)
 
+    def test_a2a_data_part_decodes_integer_numbers_as_floats(self) -> None:
+        part = new_data_part(
+            {
+                "tool_calls": [
+                    {
+                        "tool_name": "calculate_charging_soc_by_time",
+                        "arguments": {
+                            "start_state_of_charge": 20,
+                            "charging_time": 40,
+                        },
+                    }
+                ]
+            }
+        )
+
+        data = MessageToDict(part.data)
+        arguments = data["tool_calls"][0]["arguments"]
+
+        self.assertEqual(arguments["charging_time"], 40.0)
+        self.assertIs(type(arguments["charging_time"]), float)
+        self.assertEqual(arguments["start_state_of_charge"], 20.0)
+        self.assertIs(type(arguments["start_state_of_charge"]), float)
+
+    def test_evaluator_normalizes_integral_float_tool_arguments(self) -> None:
+        schemas = _tool_parameter_schemas(
+            [
+                {
+                    "function": {
+                        "name": "calculate_charging_soc_by_time",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "start_state_of_charge": {"type": "integer"},
+                                "charging_time": {"type": "integer"},
+                            },
+                        },
+                    }
+                }
+            ]
+        )
+
+        normalized = _normalize_tool_arguments(
+            "calculate_charging_soc_by_time",
+            {
+                "start_state_of_charge": 20.0,
+                "charging_time": 40.0,
+                "unknown_numeric_argument": 1.0,
+            },
+            schemas,
+        )
+
+        self.assertEqual(normalized["start_state_of_charge"], 20)
+        self.assertIs(type(normalized["start_state_of_charge"]), int)
+        self.assertEqual(normalized["charging_time"], 40)
+        self.assertIs(type(normalized["charging_time"]), int)
+        self.assertEqual(normalized["unknown_numeric_argument"], 1.0)
+        self.assertIs(type(normalized["unknown_numeric_argument"]), float)
+
+    def test_evaluator_normalizes_nested_planning_tool_integer_arguments(self) -> None:
+        schemas = _tool_parameter_schemas(
+            [
+                {
+                    "function": {
+                        "name": "planning_tool",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "steps": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "step_dependent_on": {
+                                                "type": "array",
+                                                "items": {"type": "integer"},
+                                            }
+                                        },
+                                    },
+                                },
+                                "step_updates": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "step_index": {"type": "integer"}
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    }
+                }
+            ]
+        )
+
+        normalized = _normalize_tool_arguments(
+            "planning_tool",
+            {
+                "steps": [
+                    {
+                        "step_description": "a",
+                        "step_dependent_on": [0.0],
+                    }
+                ],
+                "step_updates": [{"step_index": 0.0}],
+            },
+            schemas,
+        )
+
+        dependency = normalized["steps"][0]["step_dependent_on"][0]
+        step_index = normalized["step_updates"][0]["step_index"]
+        self.assertEqual(dependency, 0)
+        self.assertIs(type(dependency), int)
+        self.assertEqual(step_index, 0)
+        self.assertIs(type(step_index), int)
+
+    def test_evaluator_preserves_fractional_floats_and_bools(self) -> None:
+        schemas = {
+            "test_tool": {
+                "type": "object",
+                "properties": {
+                    "integer_value": {"type": "integer"},
+                    "boolean_value": {"type": "integer"},
+                },
+            }
+        }
+
+        normalized = _normalize_tool_arguments(
+            "test_tool",
+            {"integer_value": 40.5, "boolean_value": True},
+            schemas,
+        )
+
+        self.assertEqual(normalized["integer_value"], 40.5)
+        self.assertIs(type(normalized["integer_value"]), float)
+        self.assertIs(normalized["boolean_value"], True)
+
+    def test_parse_tool_calls_serializes_normalized_integer_arguments(self) -> None:
+        schemas = {
+            "calculate_charging_soc_by_time": {
+                "type": "object",
+                "properties": {
+                    "charging_time": {"type": "integer"},
+                },
+            }
+        }
+
+        parsed = _parse_tool_calls_data(
+            [
+                {
+                    "tool_name": "calculate_charging_soc_by_time",
+                    "arguments": {"charging_time": 40.0},
+                }
+            ],
+            schemas,
+        )
+
+        arguments = json.loads(parsed[0]["function"]["arguments"])
+        self.assertEqual(arguments["charging_time"], 40)
+        self.assertIs(type(arguments["charging_time"]), int)
+
+    def test_generic_tool_exception_is_recorded_in_tool_execution_errors(self) -> None:
+        class FailingTool:
+            @staticmethod
+            def invoke(**kwargs):
+                raise TypeError("boom")
+
+        env = Env.__new__(Env)
+        env.actions = []
+        env.data = {}
+        env.task = fake_task()
+        env.tools_map = {"failing_tool": FailingTool}
+
+        token = tool_execution_errors_during_runtime.set([])
+        try:
+            response = env.step(
+                SimpleNamespace(name="failing_tool", kwargs={}),
+                [],
+            )
+            errors = tool_execution_errors_during_runtime.get()
+        finally:
+            tool_execution_errors_during_runtime.reset(token)
+
+        self.assertEqual(response.observation, "Error: boom")
+        self.assertEqual(errors, ["failing_tool: TypeError: boom"])
+
+    def test_async_generic_tool_exception_is_recorded_in_tool_execution_errors(self) -> None:
+        class FailingTool:
+            @staticmethod
+            def invoke(**kwargs):
+                raise TypeError("boom")
+
+        env = Env.__new__(Env)
+        env.terminate_tools = []
+        env.task = fake_task()
+
+        token = tool_execution_errors_during_runtime.set([])
+        try:
+            result = asyncio.run(
+                env._run_action(
+                    SimpleNamespace(name="failing_tool", kwargs={}),
+                    {"failing_tool": FailingTool},
+                    {},
+                )
+            )
+            errors = tool_execution_errors_during_runtime.get()
+        finally:
+            tool_execution_errors_during_runtime.reset(token)
+
+        self.assertEqual(result["observation"], "Error: boom")
+        self.assertEqual(errors, ["failing_tool: TypeError: boom"])
+
+    def test_explicit_tool_execution_errors_are_preserved(self) -> None:
+        class ExplicitFailureTool:
+            @staticmethod
+            def invoke(**kwargs):
+                tool_execution_errors_during_runtime.get().append("explicit failure")
+                return '{"status":"FAILURE"}'
+
+        env = Env.__new__(Env)
+        env.actions = []
+        env.data = {}
+        env.task = fake_task()
+        env.tools_map = {"explicit_failure_tool": ExplicitFailureTool}
+
+        token = tool_execution_errors_during_runtime.set([])
+        try:
+            response = env.step(
+                SimpleNamespace(name="explicit_failure_tool", kwargs={}),
+                [],
+            )
+            errors = tool_execution_errors_during_runtime.get()
+        finally:
+            tool_execution_errors_during_runtime.reset(token)
+
+        self.assertEqual(response.observation, '{"status":"FAILURE"}')
+        self.assertEqual(errors, ["explicit failure"])
+
     def test_cerebras_respond_action_returns_text_part(self) -> None:
         parts, history_message = CerebrasCARBenchAgentExecutor._build_a2a_response_parts(
             {
@@ -734,11 +995,13 @@ class A2AResponseContractTest(unittest.TestCase):
                 "tool_calls": [
                     {
                         "tool_name": "open_close_sunshade",
-                        "arguments": {"percentage": 50},
+                        "arguments": {"percentage": 50.0},
                     }
                 ]
             },
         )
+        percentage = data["tool_calls"][0]["arguments"]["percentage"]
+        self.assertIs(type(percentage), float)
         self.assertIsNone(history_message["content"])
         self.assertEqual(
             history_message["tool_calls"][0]["function"]["name"],

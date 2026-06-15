@@ -28,6 +28,12 @@ The evaluator wrapper converts these A2A parts back into the OpenAI-style assist
 message format expected by CAR-bench core. Do not execute vehicle tools inside
 the agent under test; doing so bypasses the benchmark.
 
+The protobuf data-Part representation does not preserve JSON integer types:
+integer-looking numbers can arrive at the evaluator as floats. The official
+evaluator normalizes tool-call arguments against the exposed tool schema before
+executing CAR-bench tools, so agents should keep returning the normal
+`{"tool_calls": [{"tool_name": "...", "arguments": {...}}]}` payload shape.
+
 The A2A spec still uses conceptual names like `TextPart` and `DataPart`, but
 this repository uses `a2a-sdk` 1.0 protobuf `Part` objects. Build them with
 `a2a.helpers.proto_helpers.new_text_part(...)` / `new_data_part(...)` and parse

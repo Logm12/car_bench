@@ -208,6 +208,12 @@ The data Part's `data` field should be the `.model_dump()` of a `ToolCallsData` 
 
 You can call **multiple tools** in a single response by adding multiple `ToolCall` entries to the list.
 
+Because A2A data Parts use protobuf `Value`, the transport may decode
+integer-looking JSON numbers as floats. The evaluator normalizes tool-call
+arguments against the currently exposed tool schema before CAR-bench tool
+execution. Keep returning ordinary JSON arguments; no participant-side payload
+change is required.
+
 ### Option 3: Text + Tool Call(s)
 
 Return both a text Part and a data Part. The text serves as a natural language explanation of what the agent is doing, while the data Part contains the actual tool calls.

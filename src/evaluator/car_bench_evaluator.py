@@ -73,6 +73,111 @@ AGENT_OUTPUT_TOKENS = "agent_output_tokens"
 AGENT_TOTAL_TOKENS = "agent_total_tokens"
 
 
+def _schema_has_type(schema: Dict[str, Any], schema_type: str) -> bool:
+    declared_type = schema.get("type")
+    if isinstance(declared_type, str):
+        return declared_type == schema_type
+    if isinstance(declared_type, list):
+        return schema_type in declared_type
+    return False
+
+
+def _is_integral_float(value: Any) -> bool:
+    return (
+        isinstance(value, float)
+        and not isinstance(value, bool)
+        and value.is_integer()
+    )
+
+
+def _tool_parameter_schemas(
+    tools_info: List[Dict[str, Any]] | None,
+) -> Dict[str, Dict[str, Any]]:
+    schemas: Dict[str, Dict[str, Any]] = {}
+    for tool in tools_info or []:
+        if not isinstance(tool, dict):
+            continue
+        function = tool.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        parameters = function.get("parameters")
+        if isinstance(name, str) and isinstance(parameters, dict):
+            schemas[name] = parameters
+    return schemas
+
+
+def _normalize_value_for_schema(value: Any, schema: Any) -> Any:
+    if not isinstance(schema, dict):
+        return value
+
+    if _schema_has_type(schema, "integer") and _is_integral_float(value):
+        return int(value)
+
+    is_object_schema = _schema_has_type(schema, "object") or "properties" in schema
+    if isinstance(value, dict) and is_object_schema:
+        properties = schema.get("properties", {})
+        additional_properties = schema.get("additionalProperties")
+        normalized = {}
+        for key, item in value.items():
+            if isinstance(properties, dict) and key in properties:
+                normalized[key] = _normalize_value_for_schema(item, properties[key])
+            elif isinstance(additional_properties, dict):
+                normalized[key] = _normalize_value_for_schema(
+                    item,
+                    additional_properties,
+                )
+            else:
+                normalized[key] = item
+        return normalized
+
+    is_array_schema = _schema_has_type(schema, "array") or "items" in schema
+    if isinstance(value, list) and is_array_schema:
+        item_schema = schema.get("items")
+        return [_normalize_value_for_schema(item, item_schema) for item in value]
+
+    return value
+
+
+def _normalize_tool_arguments(
+    tool_name: str,
+    arguments: Any,
+    tool_parameter_schemas: Dict[str, Dict[str, Any]] | None,
+) -> Any:
+    if not isinstance(arguments, dict):
+        return arguments
+    if not tool_parameter_schemas:
+        return arguments
+    schema = tool_parameter_schemas.get(tool_name)
+    if not isinstance(schema, dict):
+        return arguments
+    return _normalize_value_for_schema(arguments, schema)
+
+
+def _parse_tool_calls_data(
+    tool_calls_data: list,
+    tool_parameter_schemas: Dict[str, Dict[str, Any]] | None = None,
+) -> list:
+    """Parse A2A tool-call data into the format expected by CAR-bench core."""
+    parsed_tool_calls = []
+    for tc in tool_calls_data:
+        tool_name = tc.get("tool_name", tc.get("toolName", ""))
+        arguments = _normalize_tool_arguments(
+            tool_name,
+            tc.get("arguments", {}),
+            tool_parameter_schemas,
+        )
+        parsed_tool_calls.append({
+            "id": f"call_{hash(json.dumps(tc)) % 100000000:08x}",
+            "type": "function",
+            "function": {
+                "name": tool_name,
+                "arguments": json.dumps(arguments),
+            },
+        })
+    return parsed_tool_calls
+
+
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -312,7 +417,8 @@ def create_remote_agent_factory(agent_url: str):
                 )
 
                 # Parse response into standard message format
-                next_message = self._parse_response(response)
+                tool_parameter_schemas = _tool_parameter_schemas(tools_info)
+                next_message = self._parse_response(response, tool_parameter_schemas)
 
                 # Extract turn_metrics from response metadata (only on final responses)
                 response_metadata = getattr(response, "metadata", None)
@@ -356,7 +462,11 @@ def create_remote_agent_factory(agent_url: str):
 
                 return next_message, updated_state
 
-            def _parse_response(self, response) -> Dict[str, Any]:
+            def _parse_response(
+                self,
+                response,
+                tool_parameter_schemas: Dict[str, Dict[str, Any]] | None = None,
+            ) -> Dict[str, Any]:
                 """Parse the A2A Message response into standard agent message format.
 
                 Handles both protobuf Message (v1.0) and Pydantic Message (v0.3 compat) formats.
@@ -384,7 +494,10 @@ def create_remote_agent_factory(agent_url: str):
                             elif content_type == "data":
                                 data = MessageToDict(part.data)
                                 if "tool_calls" in data:
-                                    tool_calls = self._parse_tool_calls(data["tool_calls"])
+                                    tool_calls = self._parse_tool_calls(
+                                        data["tool_calls"],
+                                        tool_parameter_schemas,
+                                    )
                                 elif "reasoning_content" in data:
                                     reasoning_content = data["reasoning_content"]
                         # Handle Pydantic Part (v0.3 compat) — has .root attribute
@@ -394,7 +507,10 @@ def create_remote_agent_factory(agent_url: str):
                             elif hasattr(part.root, 'data') and part.root.data is not None:
                                 data = part.root.data
                                 if "tool_calls" in data:
-                                    tool_calls = self._parse_tool_calls(data["tool_calls"])
+                                    tool_calls = self._parse_tool_calls(
+                                        data["tool_calls"],
+                                        tool_parameter_schemas,
+                                    )
                                 elif "reasoning_content" in data:
                                     reasoning_content = data["reasoning_content"]
                         # Handle dict representation
@@ -405,7 +521,10 @@ def create_remote_agent_factory(agent_url: str):
                             elif "data" in part_data and part_data["data"]:
                                 data = part_data["data"]
                                 if "tool_calls" in data:
-                                    tool_calls = self._parse_tool_calls(data["tool_calls"])
+                                    tool_calls = self._parse_tool_calls(
+                                        data["tool_calls"],
+                                        tool_parameter_schemas,
+                                    )
                                 elif "reasoning_content" in data:
                                     reasoning_content = data["reasoning_content"]
 
@@ -437,19 +556,15 @@ def create_remote_agent_factory(agent_url: str):
                     }
 
             @staticmethod
-            def _parse_tool_calls(tool_calls_data: list) -> list:
+            def _parse_tool_calls(
+                tool_calls_data: list,
+                tool_parameter_schemas: Dict[str, Dict[str, Any]] | None = None,
+            ) -> list:
                 """Parse tool calls from structured data into LLM format."""
-                return [
-                    {
-                        "id": f"call_{hash(json.dumps(tc)) % 100000000:08x}",
-                        "type": "function",
-                        "function": {
-                            "name": tc.get("tool_name", tc.get("toolName", "")),
-                            "arguments": json.dumps(tc.get("arguments", {})),
-                        },
-                    }
-                    for tc in tool_calls_data
-                ]
+                return _parse_tool_calls_data(
+                    tool_calls_data,
+                    tool_parameter_schemas,
+                )
 
         return RemoteA2AAgent(agent_url=agent_url)
 
