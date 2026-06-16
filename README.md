@@ -31,7 +31,7 @@ The official competition has two tracks:
 | Track | Goal | Starter |
 | --- | --- | --- |
 | **Track 1: Open Track** | Use any model, provider, framework, or architecture to maximize reliability. The Best Innovation Award focuses on agent harnessing and reliability design. | [`src/track_1_agent_under_test/`](src/track_1_agent_under_test/) |
-| **Track 2: Cerebras Fast-Reasoning** | Use direct Cerebras-hosted `gpt-oss` inference and compute-aware harnessing to turn fast inference into better reliability under the official time budget. Participation is limited to 15 teams. | [`src/track_2_agent_under_test_cerebras/`](src/track_2_agent_under_test_cerebras/) and planner variant |
+| **Track 2: Cerebras Fast-Reasoning** | Use direct Cerebras-hosted `gpt-oss` inference and compute-aware harnessing to turn fast inference into better reliability under Track 2 inference-compute constraints. Track 2 registration is closed. | [`src/track_2_agent_under_test_cerebras/`](src/track_2_agent_under_test_cerebras/) and planner variant |
 
 Final ranking is performed by the organizers on a hidden test set. The local
 `local_test_set.toml`, `local_docker_test_set.toml`, and `ghcr_test_set.toml`
@@ -177,13 +177,21 @@ retry reactively only after a Cerebras 429, using
 `retry-after` otherwise. Provider queue pressure uses jittered local backoff.
 Cerebras 429s write JSON reports to
 `/tmp/car-bench-rate-limit-reports` by default. Expect organizers to provide
-a few elevated-rate/priority test windows for speed-sensitive validation.
-Final time-budget and quota-wait accounting details will be announced before
-the official evaluation.
-Participants may self-host the open-source models used by Cerebras during
-ordinary development. Codex Pro plans are still provided to selected Track 2
-teams for faster harness engineering and development, with allocation by
-June 15; Codex Pro is not the submitted-agent runtime for these templates.
+increased Cerebras rate limits compared with a free personal account; access
+details will follow soon. Participants may self-host the open-source models
+used by Cerebras during ordinary development. Codex Pro is not the submitted-agent
+runtime for these templates.
+
+Track 2 uses inference-compute constraints. Participants may use up to 5
+sequential LLM calls for each baseline LLM step; parallel calls inside one step
+are allowed. Token usage is limited to 500k tokens on average per task,
+including input, reasoning, and output tokens. The reference baseline uses
+about 54k tokens on average per task. Report token usage through
+`Message.metadata.turn_metrics.prompt_tokens`,
+`completion_tokens`, and `thinking_tokens`, aggregated across all internal LLM
+calls before the final response for that assistant step. Sequential-call
+compliance is documented through the technical-report architecture diagram, not
+through a new A2A metadata field.
 
 Track 2 details live in the agent READMEs:
 
@@ -348,7 +356,9 @@ submission shape is:
    values.
 4. Track selection: `track_1`, `track_2`, or `both`.
 5. A 4-page IJCAI-format technical report that cites CAR-bench. Use the
-   [IJCAI author kit](https://www.ijcai.org/authors_kit).
+   [IJCAI author kit](https://www.ijcai.org/authors_kit). Track 2 reports
+   should include an architecture diagram so the sequential-call constraint can
+   be audited.
 
 All LLM model names, provider routes, deployment names, API bases, service
 tiers, and reasoning-effort selectors must be configurable through environment

@@ -36,12 +36,12 @@ Use Cerebras-hosted `gpt-oss` models for submitted Track 2 agents. Leave
 `TRACK2_PLANNER_TEMPERATURE` and `TRACK2_TEMPERATURE` unset to use provider
 defaults, or set them explicitly when needed.
 
-## Public-Tier Development Logistics
+## Cerebras Development Logistics
 
-Most participants will use the Cerebras public tier during development. Rate
-limits can be strict, so use smaller smoke scenarios first, keep completion
-budgets tight, and schedule large public-tier runs externally rather than
-launching many at once. The reference templates do not do proactive local
+Free personal Cerebras accounts can have strict rate limits during development,
+so use smaller smoke scenarios first, keep completion budgets tight, and
+schedule large runs externally rather than launching many at once. The reference
+templates do not do proactive local
 request/token quota pacing before calls. They retry reactively only after a
 provider-visible Cerebras 429:
 
@@ -59,16 +59,13 @@ The reference templates compute `avg_llm_call_time_ms` only from successful
 provider calls. Failed 429 attempts are visible in logs/reports but do not enter
 submitted LLM latency.
 
-Organizers will provide a few elevated-rate/priority test windows for Track 2
-teams. Use those windows to validate speed-sensitive harness behavior and
-larger public validation runs. Participants may also self-host the open-source
-models used by the Cerebras `gpt-oss` executor during development, then switch
-to the Cerebras endpoint for test-window validation.
+Cerebras will provide increased rate limits compared with a free personal
+account; access details will follow soon. Participants may also self-host the
+open-source models used by the Cerebras `gpt-oss` executor during development,
+then switch to the Cerebras endpoint for official validation.
 
-Codex Pro plans are allocated by June 15 for selected Track 2 participants to
-speed up harness engineering and development. Codex with
-`gpt-5.3-codex-spark` is not the runtime used by the new submitted-agent
-templates.
+Codex with `gpt-5.3-codex-spark` is not the runtime used by the new
+submitted-agent templates.
 
 ## Pattern 1: Direct Next-Action Baseline
 
@@ -129,8 +126,16 @@ usage, estimated attempted request tokens, the failed call shape, wait decision,
 and raw provider payloads. These files are for diagnosis, reproducibility, and
 future audit.
 
-Final time-budget and quota-wait accounting details will be announced before
-the official evaluation. Until then, treat rate-limit reports as evidence for
-understanding provider behavior rather than as a final scoring-policy contract.
-Do not fabricate timing metadata. Successful planner/executor calls still count
-as LLM calls for `num_llm_calls` and `avg_llm_call_time_ms`.
+Final quota-wait accounting details will be announced before the official
+evaluation. Until then, treat rate-limit reports as evidence for understanding
+provider behavior rather than as a final scoring-policy contract. Do not
+fabricate timing metadata. Successful planner/executor calls still count as LLM
+calls for `num_llm_calls` and `avg_llm_call_time_ms`.
+
+Track 2 uses inference-compute constraints: up to 5 sequential LLM calls per
+baseline LLM step, parallel calls allowed within a step, and average usage up
+to 500k input/reasoning/output tokens on average per task. Aggregate token usage into the
+existing `turn_metrics`
+`prompt_tokens`, `completion_tokens`, and `thinking_tokens` fields. Keep
+`num_passes` in its existing internal-pass role; describe the Track 2
+sequential-call structure in the technical-report architecture diagram.

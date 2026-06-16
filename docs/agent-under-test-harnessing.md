@@ -55,7 +55,7 @@ A robust agent-under-test harness usually has four layers:
 The Track 2 Cerebras Fast-Reasoning implementation in
 `src/track_2_agent_under_test_cerebras/` follows this shape and keeps direct
 Cerebras SDK details behind a small client wrapper. For Track 2 model
-selection, public-tier rate-limit handling, and multi-pass templates, see
+selection, Cerebras rate-limit handling, and multi-pass templates, see
 `docs/cerebras-harness-patterns.md`. A concrete planner/executor reference
 agent lives in `src/track_2_agent_under_test_cerebras_planner/`.
 
@@ -86,6 +86,12 @@ Reference packages:
   reliably and keep provider logs or rate-limit report files when the harness
   has to wait. Successful planner or executor provider calls still count toward
   `num_llm_calls` and `avg_llm_call_time_ms`.
+- For Track 2, aggregate input, output, and reasoning-token usage across all
+  internal LLM calls into `Message.metadata.turn_metrics.prompt_tokens`,
+  `completion_tokens`, and `thinking_tokens` on the final response for that
+  assistant step. Do not add a new A2A field for sequential LLM-call depth; use
+  the technical-report architecture diagram to document the sequential-call
+  structure for audit.
 
 ## Agentic Harness Boundaries
 
@@ -150,9 +156,17 @@ smoke scenarios first, keep completion-token caps tight, and schedule public
 validation runs instead of launching many at once. The reference client waits
 reactively only after Cerebras 429s, preferring
 `x-ratelimit-reset-tokens-minute` when present, writes JSON reports for those
-429s, and applies jittered local backoff for provider queue pressure. Final
-time-budget and quota-wait accounting details will be announced before the
-official evaluation.
+429s, and applies jittered local backoff for provider queue pressure. Organizers
+will provide increased Cerebras rate limits compared with a free personal
+account; access details will follow soon. Final quota-wait accounting details
+will be announced before the official evaluation.
+
+Track 2 uses inference-compute constraints: up to 5 sequential LLM calls for
+each baseline LLM step, with parallel calls inside a step allowed, and average
+token usage up to 500k tokens on average per task. The reference baseline uses
+about 54k tokens on average per task. Token usage is reported through the existing `turn_metrics`
+token fields; sequential-call compliance is documented in the technical report,
+not in a new A2A metadata field.
 
 ## Extension Ideas
 

@@ -327,21 +327,25 @@ The metadata shape is:
 Field meanings:
 
 - `prompt_tokens`, `completion_tokens`, `thinking_tokens`: report provider
-  usage when available; use `0` when unavailable. The reference templates read
-  these from provider response usage objects when present.
+  usage when available; use `0` when unavailable. Aggregate these values across
+  all internal LLM calls made before this final assistant response. Track 2 token
+  accounting uses these fields for input, output, and reasoning-token reporting.
 - `cost`: provider cost for the internal calls in this assistant step; use
   `0.0` for subscription-backed runtimes that do not expose reliable cost.
 - `model`: the model or harness description, such as
   `gpt-oss-120b` or `gpt-oss-120b->gpt-oss-120b`.
 - `num_llm_calls`: number of internal model calls made before returning this
-  final response.
+  final response. This is transparency metadata for successful provider calls,
+  not the official sequential-call-depth proof.
 - `avg_llm_call_time_ms`: average duration of successful internal provider
   calls. Do not include local queueing sleeps, failed rate-limit attempts, app
   startup, parser work, or debug work. Successful planner/executor calls do
   count as provider calls.
 - `num_passes`: number of internal inference passes if the harness has a
   multi-pass planner, executor, ensemble, or validator. Use `1` for a normal
-  single-pass agent.
+  single-pass agent. Do not repurpose this field as Track 2 sequential LLM-call
+  depth; Track 2 sequential-depth compliance is described in the technical
+  report architecture diagram and may be manually audited.
 - `quota_wait_time_ms`: optional CAR-bench metadata extension reserved for
   provider or subscription quota-wait accounting. Final time-budget and
   quota-wait accounting details will be announced before the official
