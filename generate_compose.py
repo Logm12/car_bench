@@ -136,7 +136,7 @@ def parse_scenario(scenario_path: Path) -> dict[str, Any]:
 
 
 def _relative_to_output_dir(path: Path, output_dir: Path) -> str:
-    return os.path.relpath(path.resolve(), output_dir.resolve())
+    return os.path.relpath(path.resolve(), output_dir.resolve()).replace('\\', '/')
 
 
 def _relative_repo_path(path_value: str, output_dir: Path) -> str:
@@ -320,7 +320,7 @@ def collect_agent_metadata(agent: dict[str, Any]) -> dict[str, Any]:
 
 def compose_up_command(compose_path: Path, env_path: str = ENV_PATH) -> str:
     """Return the recommended Compose command for generated scenario-local files."""
-    return f"docker compose --env-file {env_path} -f {compose_path} up --abort-on-container-exit"
+    return f"docker compose --env-file {env_path} -f {compose_path.as_posix()} up --abort-on-container-exit"
 
 
 def generate_env_file(scenario: dict[str, Any]) -> str:

@@ -497,6 +497,55 @@ Rules of thumb:
 
 ---
 
+## Running VinFast Vivi Agent (Track 1)
+
+This repository contains the custom implementation of the **VinFast Vivi Agent (Track 1)**, tailored specifically for the `carbench-ijcai/car-benchmark-vv` dataset.
+
+### 1. Environment & API Key Setup
+Before executing the evaluator and agent, update your `.env` file at the root of the project with your API keys:
+- `OPENAI_API_KEY`: Required for the user simulator (`openai/gpt-4o-mini`).
+- `NVIDIA_API_KEY`: Required for the agent and grader models (`z-ai/glm-5.1` mapped via Nvidia endpoint).
+- `HF_TOKEN`: Needed to fetch the `carbench-ijcai/car-benchmark-vv` dataset from HuggingFace.
+
+Example configurations in `.env`:
+```bash
+OPENAI_API_KEY=your-openai-api-key
+HF_TOKEN=your-huggingface-token
+NVIDIA_API_KEY=your-nvidia-api-key
+
+AGENT_LLM=openai/z-ai/glm-5.1
+NVIDIA_API_BASE=https://integrate.api.nvidia.com/v1
+```
+
+### 2. How to Run Commands
+You can run the agent evaluation pipeline locally via Python processes (using `uv`):
+
+* **Run Local Smoke Test (Single Task Evaluation):**
+  ```bash
+  uv run --all-extras car-bench-run scenarios/track_1_agent_under_test/local_smoke.toml --show-logs
+  ```
+
+* **Run Unit Tests:**
+  Verify the agent's flow, intent classification, and routing mechanism:
+  ```bash
+  uv run --all-extras python -m unittest discover -s tests
+  ```
+
+* **Run Linter (Ruff):**
+  ```bash
+  python -m ruff check src/
+  ```
+
+### 3. Important Warnings & Dataset Blockers
+When starting the evaluator, you may see the following warnings in the logs:
+```text
+Warning: File not found at C:\Users\longm\.cache\huggingface\hub\datasets--carbench-ijcai--car-benchmark-vv\snapshots\...\mock_data\navigation\routes_metadata.jsonl. Returning empty iterator.
+```
+* **Reason:** The official `carbench-ijcai/car-benchmark-vv` dataset on Hugging Face does not include precomputed navigation routes or the full POI catalog in its `mock_data` subfolder.
+* **Impact:** The system falls back gracefully to empty datasets. While the evaluation runner executes without errors, any navigation task requiring route lookup will return empty results. This is a known upstream dataset constraint.
+
+---
+
 ## Citation
 
 If you use CAR-bench in your research, please cite:

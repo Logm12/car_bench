@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 import warnings
 
+# Must be set BEFORE litellm is imported anywhere (via car_bench_evaluator →
+# run.py → user.py → litellm).  Suppresses the noisy botocore/bedrock warning
+# that fires when botocore is not installed.
+os.environ["LITELLM_LOG"] = "ERROR"
+
 import uvicorn
 from starlette.applications import Starlette
 

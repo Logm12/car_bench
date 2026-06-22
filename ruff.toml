@@ -1,0 +1,5 @@
+# Ignore E402 (module level import not at top of file) because the project patches sys.path dynamically prior to loading local modules.
+line-length = 250
+
+[lint]
+ignore = ["E402"]

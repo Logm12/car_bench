@@ -1,6 +1,11 @@
 import argparse
 import asyncio
-import os, sys, time, subprocess, shlex, signal
+import os
+import sys
+import time
+import subprocess
+import shlex
+import signal
 from pathlib import Path
 import tomllib
 from typing import Any
@@ -283,14 +288,20 @@ def main():
         for p in procs:
             if p.poll() is None:
                 try:
-                    os.killpg(p.pid, signal.SIGTERM)
+                    if hasattr(os, "killpg"):
+                        os.killpg(p.pid, signal.SIGTERM)
+                    else:
+                        p.terminate()
                 except ProcessLookupError:
                     pass
         time.sleep(1)
         for p in procs:
             if p.poll() is None:
                 try:
-                    os.killpg(p.pid, signal.SIGKILL)
+                    if hasattr(os, "killpg"):
+                        os.killpg(p.pid, signal.SIGKILL)
+                    else:
+                        p.kill()
                 except ProcessLookupError:
                     pass
 

@@ -12,17 +12,19 @@ import argparse
 import asyncio
 import json
 import os
-import re
 import sys
 import time
 from pathlib import Path
-from typing import Any, List, Dict, Tuple, Optional
+from typing import Any, List, Dict, Tuple
 
 import nest_asyncio
-import uvicorn
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Suppress LiteLLM botocore/bedrock warning that fires at import time when
+# botocore is not installed.  Must be set before any litellm import.
+os.environ.setdefault("LITELLM_LOG", "ERROR")
 
 from a2a.server.tasks import TaskUpdater
 from a2a.types import TaskState
@@ -40,7 +42,7 @@ from agentbeats.tool_provider import ToolProvider
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from logging_utils import configure_logger
 from turn_metrics import (
-    TURN_METRICS_KEY, SOURCE_KEY, SOURCE_USER, SOURCE_ENVIRONMENT,
+    SOURCE_KEY, SOURCE_USER, SOURCE_ENVIRONMENT,
     extract_turn_metrics, AVG_LLM_CALL_TIME_MS, NUM_LLM_CALLS, COST,
     QUOTA_WAIT_TIME_MS, PROMPT_TOKENS, COMPLETION_TOKENS, THINKING_TOKENS,
 )
@@ -56,7 +58,7 @@ from run import run as run_benchmark
 sys.path.pop(0)
 
 # Import from car_bench package
-from car_bench.types import Action, EnvRunResult
+from car_bench.types import EnvRunResult
 
 nest_asyncio.apply()
 logger = configure_logger(role="evaluator", context="-")
@@ -321,7 +323,6 @@ def create_remote_agent_factory(agent_url: str):
 
             def generate_next_message(self, state: AgentState, tools_info: List[Dict[str, Any]]) -> Tuple[Dict[str, Any], AgentState]:
                 """Generate next message by calling remote agent under test."""
-                import asyncio
 
                 # Collect trailing tool result messages (there may be multiple from parallel tool calls)
                 tool_result_messages = []
@@ -956,9 +957,5 @@ class CARBenchEvaluator(EvaluatorAgent):
             )
 
         except Exception as e:
-            logger.error(f"Evaluation failed: {e}", exc_info=True)
-            await updater.update_status(
-                TaskState.TASK_STATE_FAILED,
-                new_text_message(f"Evaluation failed: {e}")
-            )
+            logger.error("Evaluation failed: {}", e, exc_info=True)
             raise
